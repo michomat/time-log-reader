@@ -31,12 +31,18 @@ public class Main {
 	private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("HH:mm");
 
 	public static void main(final String[] args) throws IOException {
-
 		final Args programArguments = new Args();
-		JCommander.newBuilder()
-		.addObject(programArguments)
-		.build()
-		.parse(args);
+		final JCommander jocommander = JCommander.newBuilder()
+				.addObject(programArguments)
+				.programName("Log Reader")
+				.build();
+
+		if (args.length != 2) {
+			jocommander.usage();
+			return;
+		}
+
+		jocommander.parse(args);
 
 		final File timeLogFile = programArguments.getTimeLogFile();
 		final Integer limit = Optional.ofNullable(programArguments.getLimit()).orElse(Integer.MAX_VALUE);
