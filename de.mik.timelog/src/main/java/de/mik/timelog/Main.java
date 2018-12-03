@@ -55,7 +55,7 @@ public class Main {
 		final Map<LocalDate, List<LocalTime>> endTimeByDate = endDates.stream().collect(Collectors.groupingBy(
 				LocalDateTime::toLocalDate, Collectors.mapping(LocalDateTime::toLocalTime, Collectors.toList())));
 
-		final Map<LocalDate, Integer> durationsPerDay = calculateDuration(startDates, startTimeByDate, endTimeByDate);
+		final Map<LocalDate, Integer> durationsPerDayInMinutes = calculateDuration(startDates, startTimeByDate, endTimeByDate);
 
 		final LocalDate now = LocalDate.now();
 		final TemporalField fieldISO = WeekFields.of(Locale.GERMAN).dayOfWeek();
@@ -67,12 +67,14 @@ public class Main {
 		for (int i = 0; i <= days; i++) {
 			final LocalDate current = monday.plusDays(i);
 
-			final Integer durationForDay = durationsPerDay.get(current);
+			final Integer minutes = durationsPerDayInMinutes.get(current);
+
+			final float hours = minutes.floatValue() / 60f;
 
 			final String firstStart = startTimeByDate.get(current).stream().findFirst().map(lt -> lt.format(DTF)).orElse("<empty>");
 			final String lastEnd = endTimeByDate.get(current).stream().reduce((first, second) -> second).map(lt -> lt.format(DTF)).orElse("<empty>");
 
-			System.out.println(String.format("%s Beginn: %s Ende: %s Dauer: %sh", current, firstStart, lastEnd, durationForDay));
+			System.out.println(String.format("%s Beginn: %s Ende: %s Dauer: %.1fh", current, firstStart, lastEnd, hours));
 		}
 	}
 
@@ -97,7 +99,7 @@ public class Main {
 					if (start.isBefore(end)) {
 						final Duration duration = Duration.between(start, end);
 
-						durationPerDay.merge(localDate, (int) duration.toHours(), (d1, d2) -> d1 + d2);
+						durationPerDay.merge(localDate, (int) duration.toMinutes(), (d1, d2) -> d1 + d2);
 					}
 				}
 			}
