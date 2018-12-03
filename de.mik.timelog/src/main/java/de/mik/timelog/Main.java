@@ -37,11 +37,6 @@ public class Main {
 				.programName("Log Reader")
 				.build();
 
-		if (args.length != 2) {
-			jocommander.usage();
-			return;
-		}
-
 		jocommander.parse(args);
 
 		final File timeLogFile = programArguments.getTimeLogFile();
