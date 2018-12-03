@@ -1,7 +1,7 @@
 @echo off
 
-set log="D:/test/log.txt"
+set log="C:/time/log.txt"
 set hour=%time:~0,2%
 set min=%time:~3,2%
 
-echo "End: %date% %hour%:%min%" >> "%log%"
+echo End: %date% %hour%:%min% >> %log%
