@@ -7,95 +7,117 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Period;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalField;
+import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 
+import com.beust.jcommander.JCommander;
+
 public class Main {
 
-	private static Pattern endPattern = Pattern.compile("End: (\\d{1,2}.\\d{1,2}.\\d{4} \\d{1,2}:\\d{1,2})");
-	private static Pattern startPattern = Pattern.compile("Start: (\\d{1,2}.\\d{1,2}.\\d{4} \\d{1,2}:\\d{1,2})");
+	private static final Pattern END_LOG_PATTERN = Pattern.compile("End: (\\d{1,2}.\\d{1,2}.\\d{4} \\d{1,2}:\\d{1,2})");
+	private static final Pattern START_LOG_PATTERN = Pattern.compile("Start: (\\d{1,2}.\\d{1,2}.\\d{4} \\d{1,2}:\\d{1,2})");
 
-	public static void main(String[] args) throws IOException {
-		if (args.length != 1) {
-			throw new IllegalStateException("Illegal amount of parameters " + args);
-		}
+	private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("HH:mm");
 
-		List<String> lines = FileUtils.readLines(new File(args[0]), Charset.defaultCharset());
+	public static void main(final String[] args) throws IOException {
 
-		List<LocalDateTime> startDates = new ArrayList<>();
-		List<LocalDateTime> endDates = new ArrayList<>();
+		final Args programArguments = new Args();
+		JCommander.newBuilder()
+		.addObject(programArguments)
+		.build()
+		.parse(args);
+
+		final File timeLogFile = programArguments.getTimeLogFile();
+
+		final List<String> lines = FileUtils.readLines(timeLogFile, Charset.defaultCharset());
+
+		final List<LocalDateTime> startDates = new ArrayList<>();
+		final List<LocalDateTime> endDates = new ArrayList<>();
 
 		initDates(lines, startDates, endDates);
 
-		Map<LocalDate, List<LocalTime>> startTimeByDate = startDates.stream().collect(Collectors.groupingBy(
+		final Map<LocalDate, List<LocalTime>> startTimeByDate = startDates.stream().collect(Collectors.groupingBy(
 				LocalDateTime::toLocalDate, Collectors.mapping(LocalDateTime::toLocalTime, Collectors.toList())));
 
-		Map<LocalDate, List<LocalTime>> endTimeByDate = endDates.stream().collect(Collectors.groupingBy(
+		final Map<LocalDate, List<LocalTime>> endTimeByDate = endDates.stream().collect(Collectors.groupingBy(
 				LocalDateTime::toLocalDate, Collectors.mapping(LocalDateTime::toLocalTime, Collectors.toList())));
 
-		Map<LocalDate, Duration> durationsPerDay = calculateDuration(startDates, startTimeByDate, endTimeByDate);
-		
-		Set<Entry<LocalDate, Duration>> entries = durationsPerDay.entrySet();
-		Set<Entry<LocalDate, Duration>> sortedEntries = new TreeSet<Entry<LocalDate, Duration>>(Comparator.comparing(Entry::getKey));
-		sortedEntries.addAll(entries);
-		for (Entry<LocalDate, Duration> entry : sortedEntries) {
-				System.out.println(entry.getKey() +":" + entry.getValue().toHours() + "h");
+		final Map<LocalDate, Integer> durationsPerDay = calculateDuration(startDates, startTimeByDate, endTimeByDate);
+
+		final LocalDate now = LocalDate.now();
+		final TemporalField fieldISO = WeekFields.of(Locale.GERMAN).dayOfWeek();
+		final LocalDate monday = now.with(fieldISO, 1);
+
+		final Period period = Period.between(monday,now);
+		final int days = period.getDays();
+
+		for (int i = 0; i <= days; i++) {
+			final LocalDate current = monday.plusDays(i);
+
+			final Integer durationForDay = durationsPerDay.get(current);
+
+			final String firstStart = startTimeByDate.get(current).stream().findFirst().map(lt -> lt.format(DTF)).orElse("<empty>");
+			final String lastEnd = endTimeByDate.get(current).stream().reduce((first, second) -> second).map(lt -> lt.format(DTF)).orElse("<empty>");
+
+			System.out.println(String.format("%s Beginn: %s Ende: %s Dauer: %sh", current, firstStart, lastEnd, durationForDay));
 		}
 	}
 
-	private static Map<LocalDate, Duration> calculateDuration(List<LocalDateTime> startDates, Map<LocalDate, List<LocalTime>> startTimeByDate,
-			Map<LocalDate, List<LocalTime>> endTimeByDate) {
-		Map<LocalDate, Duration> durationPerDay = new HashMap<>();
-		for (LocalDateTime dateTime : startDates) {
-			LocalDate localDate = dateTime.toLocalDate();
-			List<LocalTime> startTimes = startTimeByDate.get(localDate);
-			List<LocalTime> endTimes = endTimeByDate.get(localDate);
+	private static Map<LocalDate, Integer> calculateDuration(final List<LocalDateTime> startDates, final Map<LocalDate, List<LocalTime>> startTimeByDate,
+			final Map<LocalDate, List<LocalTime>> endTimeByDate) {
+		final Map<LocalDate, Integer> durationPerDay = new HashMap<>();
+		for (final LocalDateTime dateTime : startDates) {
+			final LocalDate localDate = dateTime.toLocalDate();
+			final List<LocalTime> startTimes = startTimeByDate.get(localDate);
+			final List<LocalTime> endTimes = endTimeByDate.get(localDate);
 
 			Collections.sort(startTimes);
 			Collections.sort(endTimes);
 
 			for (int i = 0; i < startTimes.size(); i++) {
-				LocalTime start = startTimes.get(i);
+				final LocalTime start = startTimes.get(i);
 
 				if (endTimes.size() > i) {
 
-					LocalTime end = endTimes.get(i);
+					final LocalTime end = endTimes.get(i);
 
 					if (start.isBefore(end)) {
-						Duration duration = Duration.between(start, end);
+						final Duration duration = Duration.between(start, end);
 
-						durationPerDay.put(dateTime.toLocalDate(), duration);
+						durationPerDay.merge(localDate, (int) duration.toHours(), (d1, d2) -> d1 + d2);
 					}
 				}
 			}
 		}
-		
+
 		return durationPerDay;
 	}
 
-	private static void initDates(List<String> lines, List<LocalDateTime> startDates, List<LocalDateTime> endDates) {
-		for (String line : lines) {
-			Matcher startMatcher = startPattern.matcher(line);
-			Matcher endMatcher = endPattern.matcher(line);
+	private static void initDates(final List<String> lines, final List<LocalDateTime> startDates, final List<LocalDateTime> endDates) {
+		for (final String line : lines) {
+			final String trimLine = line.trim();
+
+			final Matcher startMatcher = START_LOG_PATTERN.matcher(trimLine);
+			final Matcher endMatcher = END_LOG_PATTERN.matcher(trimLine);
 			if (startMatcher.matches()) {
-				String dateString = startMatcher.group(1);
+				final String dateString = startMatcher.group(1);
 
 				startDates.add(LocalDateTime.parse(dateString, (DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))));
 			} else if (endMatcher.matches()) {
-				String dateString = endMatcher.group(1);
+				final String dateString = endMatcher.group(1);
 
 				endDates.add(LocalDateTime.parse(dateString, (DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))));
 			}
