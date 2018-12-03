@@ -1,5 +1,6 @@
 language: java
 
+before_install: cd de.mik.timelog
 install: mvn install 
 
 addons:
