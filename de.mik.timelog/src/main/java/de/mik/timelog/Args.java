@@ -6,11 +6,18 @@ import com.beust.jcommander.Parameter;
 
 public class Args {
 
-	@Parameter(names = "-log", converter = FileConverter.class)
+	@Parameter(names = "-log", description = "Path to log file with start and shutdown timestamps", converter = FileConverter.class, required = true)
 	private File timeLogFile;
+
+	@Parameter(names = "-limit", description = "Limit the log entries", required = false)
+	private Integer limit;
 
 	public File getTimeLogFile() {
 		return this.timeLogFile;
+	}
+
+	public Integer getLimit() {
+		return this.limit;
 	}
 
 }

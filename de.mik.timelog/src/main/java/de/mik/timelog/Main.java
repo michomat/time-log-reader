@@ -7,16 +7,14 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.Period;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalField;
-import java.time.temporal.WeekFields;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -41,6 +39,7 @@ public class Main {
 		.parse(args);
 
 		final File timeLogFile = programArguments.getTimeLogFile();
+		final Integer limit = Optional.ofNullable(programArguments.getLimit()).orElse(Integer.MAX_VALUE);
 
 		final List<String> lines = FileUtils.readLines(timeLogFile, Charset.defaultCharset());
 
@@ -57,26 +56,35 @@ public class Main {
 
 		final Map<LocalDate, Integer> durationsPerDayInMinutes = calculateDuration(startDates, startTimeByDate, endTimeByDate);
 
-		final LocalDate now = LocalDate.now();
-		final TemporalField fieldISO = WeekFields.of(Locale.GERMAN).dayOfWeek();
-		final LocalDate monday = now.with(fieldISO, 1);
 
-		final Period period = Period.between(monday,now);
-		final int days = period.getDays();
+		durationsPerDayInMinutes.entrySet().stream().limit(limit).forEach(entry -> {
 
-		for (int i = 0; i <= days; i++) {
-			final LocalDate current = monday.plusDays(i);
+			final LocalDate date = entry.getKey();
 
-			final Integer minutes = durationsPerDayInMinutes.get(current);
+			final Integer minutes = entry.getValue();
 
 			final float hours = minutes.floatValue() / 60f;
 
-			final String firstStart = startTimeByDate.get(current).stream().findFirst().map(lt -> lt.format(DTF)).orElse("<empty>");
-			final String lastEnd = endTimeByDate.get(current).stream().reduce((first, second) -> second).map(lt -> lt.format(DTF)).orElse("<empty>");
+			final String first = getFirstEntryOfDay(startTimeByDate, date);
 
+			final String last = getLastEntryOfDay(endTimeByDate, date);
 
-			System.out.println(String.format("%s Beginn: %s Ende: %s Dauer: %.1fh", current, firstStart, lastEnd, hours));
-		}
+			System.out.println(String.format("%s Beginn: %s Ende: %s Dauer: %.1fh", date, first, last, hours));
+		});
+	}
+
+	private static String getLastEntryOfDay(final Map<LocalDate, List<LocalTime>> endTimeByDate, final LocalDate current) {
+		final List<LocalTime> endTimes = endTimeByDate.getOrDefault(current, Arrays.asList(LocalTime.now()));
+		return endTimes.stream().reduce((first, second) -> second).map(lt -> lt.format(DTF))
+				.orElseThrow(IllegalStateException::new);
+	}
+
+	private static String getFirstEntryOfDay(final Map<LocalDate, List<LocalTime>> startTimeByDate, final LocalDate current) {
+		final List<LocalTime> startTimes = startTimeByDate.getOrDefault(current, Arrays.asList(LocalTime.now()));
+		return startTimes.stream()
+				.findFirst()
+				.map(lt -> lt.format(DTF))
+				.orElseThrow(IllegalStateException::new);
 	}
 
 	private static Map<LocalDate, Integer> calculateDuration(final List<LocalDateTime> startDates, final Map<LocalDate, List<LocalTime>> startTimeByDate,
@@ -84,8 +92,8 @@ public class Main {
 		final Map<LocalDate, Integer> durationPerDay = new HashMap<>();
 		for (final LocalDateTime dateTime : startDates) {
 			final LocalDate localDate = dateTime.toLocalDate();
-			final List<LocalTime> startTimes = startTimeByDate.get(localDate);
-			final List<LocalTime> endTimes = endTimeByDate.get(localDate);
+			final List<LocalTime> startTimes = startTimeByDate.getOrDefault(localDate, Collections.emptyList());
+			final List<LocalTime> endTimes = endTimeByDate.getOrDefault(localDate, Collections.emptyList());
 
 			Collections.sort(startTimes);
 			Collections.sort(endTimes);
@@ -103,6 +111,10 @@ public class Main {
 						durationPerDay.merge(localDate, (int) duration.toMinutes(), (d1, d2) -> d1 + d2);
 					}
 				}
+				else {
+					final Duration duration = Duration.between(start, LocalTime.now());
+					durationPerDay.merge(localDate, (int) duration.toMinutes(), (d1, d2) -> d1 + d2);
+				}
 			}
 		}
 
@@ -119,7 +131,8 @@ public class Main {
 				final String dateString = startMatcher.group(1);
 
 				startDates.add(LocalDateTime.parse(dateString, (DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))));
-			} else if (endMatcher.matches()) {
+			}
+			else if (endMatcher.matches()) {
 				final String dateString = endMatcher.group(1);
 
 				endDates.add(LocalDateTime.parse(dateString, (DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))));
