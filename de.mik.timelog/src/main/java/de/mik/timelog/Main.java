@@ -74,6 +74,7 @@ public class Main {
 			final String firstStart = startTimeByDate.get(current).stream().findFirst().map(lt -> lt.format(DTF)).orElse("<empty>");
 			final String lastEnd = endTimeByDate.get(current).stream().reduce((first, second) -> second).map(lt -> lt.format(DTF)).orElse("<empty>");
 
+
 			System.out.println(String.format("%s Beginn: %s Ende: %s Dauer: %.1fh", current, firstStart, lastEnd, hours));
 		}
 	}
