@@ -1,4 +1,4 @@
-## time-log-reader
+# time-log-reader
 
 Little helper scripts to log start-up and shutdown times of your windows machine
 
