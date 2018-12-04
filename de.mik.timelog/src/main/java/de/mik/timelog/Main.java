@@ -49,11 +49,8 @@ public class Main {
 
 		initDates(lines, startDates, endDates);
 
-		final Map<LocalDate, List<LocalTime>> startTimeByDate = startDates.stream().collect(Collectors.groupingBy(
-				LocalDateTime::toLocalDate, Collectors.mapping(LocalDateTime::toLocalTime, Collectors.toList())));
-
-		final Map<LocalDate, List<LocalTime>> endTimeByDate = endDates.stream().collect(Collectors.groupingBy(
-				LocalDateTime::toLocalDate, Collectors.mapping(LocalDateTime::toLocalTime, Collectors.toList())));
+		final Map<LocalDate, List<LocalTime>> startTimeByDate = groupByDate(startDates);
+		final Map<LocalDate, List<LocalTime>> endTimeByDate = groupByDate(endDates);
 
 		final Map<LocalDate, Integer> durationsPerDayInMinutes = calculateDuration(startDates, startTimeByDate, endTimeByDate);
 
@@ -74,6 +71,11 @@ public class Main {
 		});
 	}
 
+	static Map<LocalDate, List<LocalTime>> groupByDate(final List<LocalDateTime> startDates) {
+		return startDates.stream().collect(Collectors.groupingBy(
+				LocalDateTime::toLocalDate, Collectors.mapping(LocalDateTime::toLocalTime, Collectors.toList())));
+	}
+
 	private static String getLastEntryOfDay(final Map<LocalDate, List<LocalTime>> endTimeByDate, final LocalDate current) {
 		final List<LocalTime> endTimes = endTimeByDate.getOrDefault(current, Arrays.asList(LocalTime.now()));
 		return endTimes.stream().reduce((first, second) -> second).map(lt -> lt.format(DTF))
@@ -88,7 +90,7 @@ public class Main {
 				.orElseThrow(IllegalStateException::new);
 	}
 
-	private static Map<LocalDate, Integer> calculateDuration(final List<LocalDateTime> startDates, final Map<LocalDate, List<LocalTime>> startTimeByDate,
+	static Map<LocalDate, Integer> calculateDuration(final List<LocalDateTime> startDates, final Map<LocalDate, List<LocalTime>> startTimeByDate,
 			final Map<LocalDate, List<LocalTime>> endTimeByDate) {
 		final Map<LocalDate, Integer> durationPerDay = new HashMap<>();
 		for (final LocalDateTime dateTime : startDates) {
