@@ -9,22 +9,24 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.Comparator;
 import java.util.List;
+import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
 import org.apache.commons.io.FileUtils;
 
 import com.beust.jcommander.JCommander;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Multimap;
 
 public class Main {
-
 	private static final Pattern END_LOG_PATTERN = Pattern.compile("End: (\\d{1,2}.\\d{1,2}.\\d{4} \\d{1,2}:\\d{1,2})");
 	private static final Pattern START_LOG_PATTERN = Pattern.compile("Start: (\\d{1,2}.\\d{1,2}.\\d{4} \\d{1,2}:\\d{1,2})");
 
@@ -44,6 +46,12 @@ public class Main {
 
 		final List<String> lines = FileUtils.readLines(timeLogFile, Charset.defaultCharset());
 
+		final List<String> accumulatedDurations = accumulateTime(limit, lines);
+
+		accumulatedDurations.forEach(System.out::println);
+	}
+
+	public static List<String> accumulateTime(final Integer limit, final List<String> lines) {
 		final List<LocalDateTime> startDates = new ArrayList<>();
 		final List<LocalDateTime> endDates = new ArrayList<>();
 
@@ -52,23 +60,37 @@ public class Main {
 		final Map<LocalDate, List<LocalTime>> startTimeByDate = groupByDate(startDates);
 		final Map<LocalDate, List<LocalTime>> endTimeByDate = groupByDate(endDates);
 
-		final Map<LocalDate, Integer> durationsPerDayInMinutes = calculateDuration(startDates, startTimeByDate, endTimeByDate);
+		final Multimap<LocalDate, WorkingPeriod> periodsPerDay = createWorkingPeriodsPerDay(startDates, endDates, startTimeByDate, endTimeByDate);
+
+		return periodsPerDay.keySet().stream()
+				.limit(limit)
+				.sorted()
+				.map(date -> createLine(date, periodsPerDay))
+				.collect(Collectors.toList());
+	}
+
+	private static String createLine(final LocalDate date, final Multimap<LocalDate, WorkingPeriod> periodsByDay) {
+		final Collection<WorkingPeriod> periodsPerDay = periodsByDay.get(date);
 
 
-		durationsPerDayInMinutes.entrySet().stream().limit(limit).forEach(entry -> {
+		final LongSummaryStatistics durationStatistic = periodsPerDay.stream()
+				.map(period -> Duration.between(period.getStart(), period.getEnd()))
+				.collect(Collectors.summarizingLong(Duration::toMinutes));
 
-			final LocalDate date = entry.getKey();
+		final long durationInMinutes = durationStatistic.getSum();
+		final float durationInHours = durationInMinutes / 60f;
 
-			final Integer minutes = entry.getValue();
+		final LocalTime lastEnd = periodsPerDay.stream()
+				.map(WorkingPeriod::getEnd)
+				.max(Comparator.comparing(x -> x))
+				.orElse(LocalTime.MAX);
 
-			final float hours = minutes.floatValue() / 60f;
+		final LocalTime firstStart = periodsPerDay.stream()
+				.map(WorkingPeriod::getStart)
+				.min(Comparator.comparing(x -> x))
+				.orElse(LocalTime.MIN);
 
-			final String first = getFirstEntryOfDay(startTimeByDate, date);
-
-			final String last = getLastEntryOfDay(endTimeByDate, date);
-
-			System.out.println(String.format("%s Beginn: %s Ende: %s Dauer: %.1fh", date, first, last, hours));
-		});
+		return String.format("%s Beginn: %s Ende: %s Dauer: %.1fh", date, firstStart.format(DTF), lastEnd.format(DTF), durationInHours);
 	}
 
 	static Map<LocalDate, List<LocalTime>> groupByDate(final List<LocalDateTime> startDates) {
@@ -76,52 +98,44 @@ public class Main {
 				LocalDateTime::toLocalDate, Collectors.mapping(LocalDateTime::toLocalTime, Collectors.toList())));
 	}
 
-	private static String getLastEntryOfDay(final Map<LocalDate, List<LocalTime>> endTimeByDate, final LocalDate current) {
-		final List<LocalTime> endTimes = endTimeByDate.getOrDefault(current, Arrays.asList(LocalTime.now()));
-		return endTimes.stream().reduce((first, second) -> second).map(lt -> lt.format(DTF))
-				.orElseThrow(IllegalStateException::new);
-	}
 
-	private static String getFirstEntryOfDay(final Map<LocalDate, List<LocalTime>> startTimeByDate, final LocalDate current) {
-		final List<LocalTime> startTimes = startTimeByDate.getOrDefault(current, Arrays.asList(LocalTime.now()));
-		return startTimes.stream()
-				.findFirst()
-				.map(lt -> lt.format(DTF))
-				.orElseThrow(IllegalStateException::new);
-	}
-
-	static Map<LocalDate, Integer> calculateDuration(final List<LocalDateTime> startDates, final Map<LocalDate, List<LocalTime>> startTimeByDate,
+	private static Multimap<LocalDate, WorkingPeriod> createWorkingPeriodsPerDay(final List<LocalDateTime> startDates, final List<LocalDateTime> endDates, final Map<LocalDate, List<LocalTime>> startTimeByDate,
 			final Map<LocalDate, List<LocalTime>> endTimeByDate) {
-		final Map<LocalDate, Integer> durationPerDay = new HashMap<>();
-		for (final LocalDateTime dateTime : startDates) {
-			final LocalDate localDate = dateTime.toLocalDate();
-			final List<LocalTime> startTimes = startTimeByDate.getOrDefault(localDate, Collections.emptyList());
-			final List<LocalTime> endTimes = endTimeByDate.getOrDefault(localDate, Collections.emptyList());
 
-			Collections.sort(startTimes);
-			Collections.sort(endTimes);
+		final Multimap<LocalDate, WorkingPeriod> periodsPerDay = ArrayListMultimap.create();
 
-			for (int i = 0; i < startTimes.size(); i++) {
-				final LocalTime start = startTimes.get(i);
+		for (final LocalDateTime currentDateTime : startDates) {
+			final LocalDate currentDate = currentDateTime.toLocalDate();
 
-				if (endTimes.size() > i) {
+			final List<LocalTime> startTimesPerDay = startTimeByDate.getOrDefault(currentDate, Collections.emptyList());
+			final List<LocalTime> endTimesPerDay = endTimeByDate.getOrDefault(currentDate, Collections.emptyList());
 
-					final LocalTime end = endTimes.get(i);
+			Collections.sort(startTimesPerDay);
+			Collections.sort(endTimesPerDay);
 
-					if (start.isBefore(end)) {
-						final Duration duration = Duration.between(start, end);
+			for (final LocalTime start : startTimesPerDay) {
 
-						durationPerDay.merge(localDate, (int) duration.toMinutes(), (d1, d2) -> d1 + d2);
-					}
-				}
-				else {
-					final Duration duration = Duration.between(start, LocalTime.now());
-					durationPerDay.merge(localDate, (int) duration.toMinutes(), (d1, d2) -> d1 + d2);
-				}
+				final LocalTime end = endTimesPerDay.stream().filter(time -> time.isAfter(start)).findFirst().orElse(LocalTime.MAX);
+
+				periodsPerDay.put(currentDate, new WorkingPeriod(start, end));
+			}
+
+			final LocalTime firstStartPerDay = startTimesPerDay.stream().findFirst().orElse(LocalTime.MIN);
+			final LocalTime firstEndPerDay = endTimesPerDay.stream().findFirst().orElseGet(() -> LocalDate.now().equals(currentDate) ? LocalTime.now() : LocalTime.MAX);
+
+			if (firstEndPerDay.isBefore(firstStartPerDay)) {
+				periodsPerDay.put(currentDate, new WorkingPeriod(LocalTime.MIN, firstEndPerDay));
 			}
 		}
+		final LocalDateTime lastStartDate = Iterables.getLast(startDates);
+		final LocalDate localDate = lastStartDate.toLocalDate();
+		final LocalDate tomorrow = localDate.plusDays(1);
 
-		return durationPerDay;
+		final Optional<LocalDateTime> lastEnd = endDates.stream().filter(end -> end.toLocalDate().isEqual(tomorrow)).findFirst();
+
+		lastEnd.ifPresent(end -> periodsPerDay.put(end.toLocalDate(), new WorkingPeriod(LocalTime.MIN, end.toLocalTime())));
+
+		return periodsPerDay;
 	}
 
 	private static void initDates(final List<String> lines, final List<LocalDateTime> startDates, final List<LocalDateTime> endDates) {
