@@ -1,7 +1,7 @@
 language: java
 
 before_install: cd de.mik.timelog
-install: mvn install 
+install: mvn clean install 
 
 addons:
   sonarcloud:
