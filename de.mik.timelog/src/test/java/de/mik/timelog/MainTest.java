@@ -21,8 +21,8 @@ public class MainTest {
 		final List<String> log = Main.accumulateTime(LIMIT, lines);
 
 		assertThat(log, contains(
-				"2018-12-10 Beginn: 07:00 Ende: 16:30 Dauer: 9,5h",
-				"2018-12-11 Beginn: 07:00 Ende: 15:30 Dauer: 8,5h"));
+				"2018-12-10 Beginn: 07:00 Ende: 16:30 Dauer: 9.5h",
+				"2018-12-11 Beginn: 07:00 Ende: 15:30 Dauer: 8.5h"));
 	}
 
 	@Test
@@ -34,7 +34,7 @@ public class MainTest {
 		final List<String> log = Main.accumulateTime(LIMIT, lines);
 
 		assertThat(log, contains(
-				"2018-12-28 Beginn: 23:00 Ende: 23:59 Dauer: 1,0h",
-				"2018-12-29 Beginn: 00:00 Ende: 02:00 Dauer: 2,0h"));
+				"2018-12-28 Beginn: 23:00 Ende: 23:59 Dauer: 1.0h",
+				"2018-12-29 Beginn: 00:00 Ende: 02:00 Dauer: 2.0h"));
 	}
 }

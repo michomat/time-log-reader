@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.Optional;
@@ -90,7 +91,7 @@ public class Main {
 				.min(Comparator.comparing(x -> x))
 				.orElse(LocalTime.MIN);
 
-		return String.format("%s Beginn: %s Ende: %s Dauer: %.1fh", date, firstStart.format(DTF), lastEnd.format(DTF), durationInHours);
+		return String.format(Locale.ROOT, "%s Beginn: %s Ende: %s Dauer: %.1fh", date, firstStart.format(DTF), lastEnd.format(DTF), durationInHours);
 	}
 
 	static Map<LocalDate, List<LocalTime>> groupByDate(final List<LocalDateTime> startDates) {
